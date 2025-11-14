@@ -11,7 +11,7 @@ $(function() {
     var candidate_url= 'https://script.google.com/macros/s/AKfycby_XDmVGRN8E8FwQgqACCCvxI1DPWDdVqmJ-vBEkabUgyzuNeaRuwTFZz3E5bCSWaLv/exec';
     var party_trends= 'https://script.google.com/macros/s/AKfycbx1F-TDnZk_rsjUmPO_3LXUnPhkPKYO94BHnCZpxIkRS63NeksprMxdxi0JRsA_O7AC/exec';
 
- 
+   var img_table='https://script.google.com/macros/s/AKfycbx6r8Ss4alrS7OeoCxsKSJqsFpovU2Ccg8OOoErHkK_s8x-PoCokvkW28U61BIrFhOm/exec';
 
 
 
@@ -50,7 +50,7 @@ $(function() {
 async function bihar_table() {
   try {
     const [res1, res3] = await Promise.allSettled([
-      fetch(tableUrl),
+      fetch(img_table),
       // fetch(total_vote),
     
       fetch(party_trends)
@@ -105,7 +105,6 @@ async function bihar_carousel() {
 
 
 
-
 function setProgressData(data) {
   let html = '';
   const maxCount = 243;
@@ -128,7 +127,10 @@ function setProgressData(data) {
         color = '#999999';
     }
 
-    const candidateName = item.Name ? item.Name.toLowerCase().replace(/\s+/g, '-') : 'unknown';
+    const candidateName = item.Name ? item.Name.replace(/\s+/g, '-') : 'unknown';
+
+    // Initial GIF: only Walk or Run — never happy/sad
+    const initialGIF = item.Status === "Run" ? "Run" : "Walk";
 
     html += `
       <div class="row align-items-end mb-1" id="candidate-${index}">
@@ -142,17 +144,15 @@ function setProgressData(data) {
         </div>
 
         <div class="col-8 position-relative">
-          <!-- Target Line -->
           <div class="target-line" style="left: ${targetPercent}%;"> </div>
 
-          <!-- Candidate GIF -->
+          <!-- Initial GIF -->
           <img id="runner-${index}" 
-               src="assets/images/${candidateName}-walk.gif" 
+               src="assets/images/${candidateName}-${initialGIF}.gif" 
                class="img-fluid imgWidth running-gif"
                style="left: 0%;" 
                alt="${item.Name}">
 
-          <!-- Progress Bar -->
           <div class="progress">
             <div id="bar-${index}" 
                  class="progress-bar progress-bar-striped progress-bar-animated" 
@@ -169,48 +169,49 @@ function setProgressData(data) {
 
   document.getElementById('progressTable').innerHTML = html;
 
-  // Animate the bar dynamically
+  // Animation loop
   data.forEach((item, index) => {
     const progressBar = document.getElementById(`bar-${index}`);
     const runnerImg = document.getElementById(`runner-${index}`);
     const countDisplay = document.getElementById(`count-${index}`);
 
-    const candidateName = item.Name ? item.Name.toLowerCase().replace(/\s+/g, '-') : 'unknown';
+    const candidateName = item.Name ? item.Name.replace(/\s+/g, '-') : 'unknown';
     const finalProgress = Math.round((item.Count / maxCount) * 100);
     const finalCount = item.Count;
 
     let current = 0;
-    let hasStarted = false;
-    const stepDelay = 200; // animation speed
+    let hasStartedMoving = false;
 
     const interval = setInterval(() => {
       if (current < finalProgress) {
         current++;
 
-        // when progress starts moving → switch to run.gif
-        if (!hasStarted) {
-          hasStarted = true;
+        // Once animation starts → Force Run animation
+        if (!hasStartedMoving) {
+          hasStartedMoving = true;
           runnerImg.src = `assets/images/${candidateName}-Run.gif`;
         }
 
         progressBar.style.width = `${current}%`;
         runnerImg.style.left = `calc(${current}% - 5%)`;
         countDisplay.textContent = Math.round((current / 100) * maxCount);
-      } else {
+      } 
+      else {
         clearInterval(interval);
-
-        // stop movement → back to walk.gif
-        runnerImg.src = `assets/images/${candidateName}-Walk.gif`;
         countDisplay.textContent = finalCount;
 
-        // win or lose condition
-        if (finalProgress >= 90 && item.Party === 'NDA+') {
-          runnerImg.src = `assets/images/${candidateName}-Win.gif`;
-        } else if (finalProgress >= 90 && item.Party !== 'NDA+') {
-          runnerImg.src = `assets/images/${candidateName}-Lose.gif`;
+        // Final GIF based on API Status
+        if (item.Status === "Win") {
+          runnerImg.src = `assets/images/${candidateName}-happy.gif`;
+        } 
+        else if (item.Status === "Lose") {
+          runnerImg.src = `assets/images/${candidateName}-sad.gif`;
+        } 
+        else {
+          runnerImg.src = `assets/images/${candidateName}-Walk.gif`;
         }
       }
-    }, stepDelay);
+    }, 100);
   });
 }
 
@@ -260,11 +261,13 @@ function setTotalData(data) {
 function setCandidateData(data) {
   const html = data.map(item => {
     const status = item.Status ? item.Status.toLowerCase() : '';
-    let statusImage = 'counting.png';
+    let statusImage = '';
+
     if (status === 'leading') statusImage = 'leading.png';
     else if (status === 'trailing') statusImage = 'trailing.png';
     else if (status === 'won') statusImage = 'won.png';
     else if (status === 'lost') statusImage = 'lost.png';
+    // counting = no image
 
     return `
       <div class="card">
@@ -274,7 +277,9 @@ function setCandidateData(data) {
         <div class="candidate_details">
           <h4>${item.CandidateName}</h4>
           <p>${item.Party} - ${item.Constituency}</p>
-          <img src="assets/images/${statusImage}" class="img-fluid status-${status || 'counting'}" alt="${item.Status || 'Counting'}">
+
+          ${statusImage ? `<img src="assets/images/${statusImage}" class="img-fluid status-${status}" alt="${item.Status}">` : ''}
+
         </div>
       </div>
     `;
@@ -289,7 +294,7 @@ function setCandidateData(data) {
     margin: 20,
     nav: true,
     dots: false,
-    autoplay: false,
+    autoplay: true,
     autoplayTimeout: 3000,
     autoplayHoverPause: true,
     responsive: {
@@ -309,14 +314,13 @@ function setCandidateData(data) {
 
 const partyColors = {
   BJP: '#ff6600',
-  Congress: '#008000',
-  RJD: '#008000',
-  JDU: '#008000',
-  JSP: '#cc0000',
-  LJP: '#008CFF'
+  JDU: '#228B22',
+  "CPI(ML)": '#C41301',
+  LPJ: '#5B006A',
+  Congress: '#0F823F',
+  RJD: '#056D05',
+  others: '#cc0000'
 };
-
-
 
 function setPartyTable(data) {
   let html = '<tbody>';
@@ -337,37 +341,36 @@ function setPartyTable(data) {
 
 
 
-
-// setInterval(() => {
-//     bihar_table();
-// }, 5000);
+setInterval(() => {
+    bihar_table();
+}, 5000);
  bihar_table();
-// setInterval(bihar_carousel, 5000);
+setInterval(bihar_carousel, 10000);
 
 bihar_carousel();
 
 
-//   $('.owl-carousel').owlCarousel({
-//     loop: true,
-//     margin: 20,
-//     nav: true,
-//     dots: false,
-//     items: 1,
-//     autoplay: false,
-//     autoplayTimeout: 3000,
-//     autoplayHoverPause: true,
-//      responsive: {
-//       0: {
-//         items: 1 // mobile: one grid (1x1)
-//       },
-//       600: {
-//         items: 1 // tablet: one grid (2x3 inside each slide)
-//       },
-//       1000: {
-//         items: 1 // desktop: one grid (2x3)
-//       }
-//     }
-//   });
+/*$('.owl-carousel').owlCarousel({
+	loop: true,
+	margin: 20,
+	nav: true,
+	dots: false,
+	items: 1,
+	autoplay: true,
+	autoplayTimeout: 3000,
+	autoplayHoverPause: true,
+	responsive: {
+		0: {
+			 items: 1 // mobile: one grid (1x1)
+		 },
+		 600: {
+		 items: 1 // tablet: one grid (2x3 inside each slide)
+		},
+		1000: {
+		 items: 1 // desktop: one grid (2x3)
+		 }
+	}
+ });*/
 
 
 
